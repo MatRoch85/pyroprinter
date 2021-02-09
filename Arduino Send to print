@@ -1,0 +1,138 @@
+//Procédure de test :
+//L123456789ABCDEFLFEDCBA987654321L123456789ABCDEFL123456789ABCDEFLFEDCBA987654321L123456789ABCDEFL123456789ABCDEF0FEDCBA987654321L123456789ABCDEFL123
+// first define the pins
+const int DirPinX = 5;    // this pin defines direction CW or CCW
+const int StepPinX = 2;   // pulse this pin to move one step
+
+const int DirPinY = 6;    // this pin defines direction CW or CCW
+const int StepPinY = 3;   // pulse this pin to move one step
+
+const int E_D = 8;        //Stepper Enable/Disable
+
+const int SPR = 200;      // Steps per revolution
+
+int ParcourX=0; //compte le nombre de pixel avancé pour calcul du retour à la ligne
+//Acquisition
+long vitesse =0;
+int Vmax = 100;// A definir, vitesse maximal pour retour à la ligne. Plus la valeur est pettite, plus ça vas vite
+int Niveau =100; //100, commande stop ; 16 commande de retour à la ligne
+
+void setup()
+{
+  Serial.begin(9600);
+  // Make pins as Outputs
+  pinMode(DirPinX, OUTPUT);
+  pinMode(StepPinX, OUTPUT);
+  pinMode(DirPinY, OUTPUT);
+  pinMode(StepPinY, OUTPUT);
+  pinMode(E_D, OUTPUT);
+}
+
+
+
+void loop()
+{ 
+  reset();
+  delay(100);
+   //delay(10) ; A supprimer : cas pour led
+  Niveau = readChar(); //lecture du niveau de gris
+  //Serial.println(Niveau);
+  if ((Niveau !=100)&&(Niveau !=16)) //Si la commande est différente d'un retour à la ligne
+   {
+    vitesse = ConvertToVitesse(Niveau) ; //convertion niveau vitesse
+    Serial.print(vitesse);
+    moteur('X','H', vitesse); //commande moteur
+   }
+   else if (Niveau ==16){//commande moteur pour débuter une nouvelle ligne si un 0 à été envoyé
+    RetourALaLigne();
+    } 
+}
+ 
+
+
+
+//https://www.youtube.com/watch?v=DpOahtA9NM0
+int readChar(){
+  int i=100; //renvoi le niveau résultant du port série
+ char Hexa='0'; // charactère lu, envoyé sous fome Hexa (0àF)
+ if (Serial.available()>0) //si il y a des choses dans ma mémoire série
+ {
+   Hexa =Serial.read(); // je lis la valeur la plus ancienne avant de l'effacer
+   if(Hexa=='0'){i=0;} //Convertion hexa --> niveau
+   else if(Hexa=='1'){i= 1;}
+   else if(Hexa=='2'){i= 2;}
+   else if(Hexa=='3'){i= 3;}
+   else if(Hexa=='4'){i= 4;}
+   else if(Hexa=='5'){i= 5;}
+   else if(Hexa=='6'){i= 6;}
+   else if(Hexa=='7'){i= 7;}
+   else if(Hexa=='8'){i= 8;}
+   else if(Hexa=='9'){i= 9;}
+   else if(Hexa=='A'){i= 10;} //A
+   else if(Hexa=='B'){i= 11;} //B
+   else if(Hexa=='C'){i= 12;}
+   else if(Hexa=='D'){i= 13;}
+   else if(Hexa=='E'){i= 14;}
+   else if(Hexa=='F'){i= 15;}
+   else if(Hexa=='L'){i= 16;}
+}
+ return i;
+}
+
+int ConvertToVitesse (int code){ //Convertie le nieau lu en vitesse (en microseconde)
+int vitesse ;
+int A=100; //coeficiant de proportionalité par rapport au code
+//si pas proportionel, changer dirrectemment la valeur de i dans readChar
+vitesse =100+code*A ;
+return vitesse;
+}
+
+void moteur(char moteur, char sens, int v){ //moteur X ou Y, sens horraire ou antihoraire, vtesse
+ 
+ int Mot; //pointe le moteur associé
+ int Step;
+ if (moteur == 'X'){Mot=DirPinX;Step=StepPinX;} 
+ if (moteur == 'Y'){Mot=DirPinY;Step=StepPinY;} 
+
+ digitalWrite(E_D, HIGH);   //Les moteur sont autorisé à tourner sur les drivers
+
+  if (sens == 'H'){
+    digitalWrite(Mot, HIGH);   // définit le sens des aiguilles d'une montre
+    Serial.write(v);           //Verif console  Serial.print(v);
+    ParcourX++; 
+    
+    for(int x = 0; x < SPR; x++)
+    {
+      digitalWrite(Step, HIGH);
+      delayMicroseconds(v);
+      digitalWrite(Step, LOW);
+      delayMicroseconds(v);
+    }
+    } 
+  if (sens == 'A'){
+    digitalWrite(Mot, LOW);   // définit le sens des aiguilles d'une montre
+    Serial.write(-v);           //Verif console  Serial.print(v);
+    for(int x = 0; x < SPR; x++)
+    {
+    digitalWrite(Step, HIGH);
+    delayMicroseconds(v);
+    digitalWrite(Step, LOW);
+    delayMicroseconds(v);
+    }
+  } 
+}
+
+void RetourALaLigne(){
+  Serial.write("404");           //demander une nouvelle ligne sur port série
+  for (int i=0; i<=ParcourX; i++){
+  moteur('X','A',Vmax); //retour un position du moteur x
+  }
+  ParcourX=0; //rénitialisation de la position
+  moteur('Y','H',Vmax); //Saut de ligne en Y, Vmax ?
+ }
+
+void reset(){
+  digitalWrite(E_D, LOW);
+  digitalWrite(StepPinX, LOW);
+  digitalWrite(StepPinY, LOW);
+}
